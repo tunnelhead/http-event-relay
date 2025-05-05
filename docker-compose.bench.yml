@@ -1,0 +1,26 @@
+version: '3'
+
+# Compose file for load testing, sets number of threads/workers for both keydb and nginx
+
+services:
+  redis:
+    image: eqalpha/keydb:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: keydb-server /etc/keydb/keydb.conf --server-threads 4
+
+  tunnel-server:
+    build: .
+    ports:
+      - "8080:80"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+    command: /usr/local/openresty/bin/openresty -g "daemon off; worker_processes 4;"
+
+volumes:
+  redis_data:
