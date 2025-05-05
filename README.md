@@ -137,7 +137,10 @@ It makes sense to disable backpressure if optimising for delivery speed and data
 
 __Acknowledgement__:
 
-There is no explicit acknowledegement. When a message is sent to a consumer, it's deleted from the storage instantly.
+By default the consumed message is automatically acknowledged and deleted.
+
+However, if using pending mode on the consumer, the relay will keep returning the same message over and over again,
+until it's manually acknowledged (deleted).
 
 ### Produce a message
 
@@ -184,6 +187,9 @@ X-Queue-Size: 1
 This endpoint checks for new messages in the tunnel in a non-blocking manner.
 The request will be complete immediately.
 
+Pending mode can be enabled by adding `pending` url parameter: `GET /t/<tunnel-id>?pending`.
+In pending mode, message has to be acknowledged (deleted) manually using acknowledgement endpoint.
+
 __Success responses:__
 
 - 204 with empty body if no new messages were found.
@@ -218,6 +224,11 @@ The request will be complete when a new message appears or if timeout reached, w
 
 Timeout can be customised by providing a number of seconds in the `timeout` url parameter: `GET /t/<tunnel-id>/poll?timeout=10`. If timeout is larger than max timeout configured for the relay instance, a max timeout will be used instead.
 
+Pending mode can be enabled by adding `pending` url parameter: `GET /t/<tunnel-id>/poll?pending`.
+In pending mode, message has to be acknowledged (deleted) manually using acknowledgement endpoint.
+
+Both url parameters can be used together: `GET /t/<tunnel-id>/poll?timeout=10&pending`.
+
 __Success responses:__
 
 - 204 with empty body if no new messages were found or timeout reached.
@@ -226,6 +237,61 @@ __Success responses:__
 __Error responses:__
 
 - 500 with text body containing error description, if internal error has occured (see OpenResty log for more details).
+
+### Acknowledge a message
+
+`DELETE /t/<tunnel-id>/<message-id>`
+
+This endpoint is used for consumers in pending mode to acknowledge message delivery and delete it from the tunnel.
+
+__Success responses:__
+
+- 204 with empty body
+
+__Error responses:__
+
+- 500 with text body containing error description, if internal error has occured (see OpenResty log for more details).
+
+__Example request:__
+
+```
+curl -X DELETE https://relay.tunnelhead.dev/t/my-secret-tunnel/1746483376267-0
+```
+
+__Example response:__
+
+```
+204 No Content
+```
+
+### Get queue size (length)
+
+`GET /t/<tunnel-id>/len`
+
+When backpressure is enabled, queue size can be checked using this endpoint.
+
+Queue size includes both seen (pending) and unseen by the consumer messages.
+
+__Success responses:__
+
+- 204 with empty body. Current queue size can be obtained from `X-Queue-Size` header in the response.
+
+__Error responses:__
+
+- 500 with text body containing error description, if internal error has occured (see OpenResty log for more details).
+
+__Example request:__
+
+```
+curl https://relay.tunnelhead.dev/t/my-secret-tunnel/len
+```
+
+__Example response:__
+
+```
+204 No Content
+X-Queue-Size: 3
+```
 
 ### Health check
 
