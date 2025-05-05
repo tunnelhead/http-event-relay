@@ -15,11 +15,29 @@ local function get_consumer_id(tunnel_id)
     return "c-" .. tunnel_id
 end
 
+local function check_access_token()
+    if not tunnel_config.token then
+        return nil
+    end
+
+    local auth_header = ngx.var.http_Authorization
+    if auth_header then
+        _, _, token = string.find(auth_header, "Bearer%s+(.+)")
+    end
+
+    if not token or token ~= tunnel_config.token then
+        ngx.status = 403
+        ngx.print("Access denied")
+        return ngx.exit(403)
+    end
+end
 
 local _M = {}
 
 -- POST a message to a tunnel
 function _M.post_message()
+    check_access_token()
+
     local tunnel_id = ngx.var.tunnel_id
     if not tunnel_id then
         ngx.status = 400
@@ -208,6 +226,8 @@ end
 
 -- GET a message from a tunnel (non-blocking)
 function _M.get_message()
+    check_access_token()
+
     local tunnel_id = ngx.var.tunnel_id
     if not tunnel_id then
         ngx.status = 400
@@ -220,6 +240,8 @@ end
 
 -- GET messages using long polling
 function _M.poll_message()
+    check_access_token()
+
     local tunnel_id = ngx.var.tunnel_id
     if not tunnel_id then
         ngx.status = 400

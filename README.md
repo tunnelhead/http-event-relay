@@ -79,6 +79,7 @@ Event relay can be configured using the following environmental variables:
 | REDIS_PASSWORD              | Redis password (optional, use if required)             |            |
 | REDIS_POOL_SIZE             | How much connections to keep alive after use           | 100        |
 | REDIS_POOL_KEEPALIVE        | How long to keep connections alive after use (seconds) | 10         |
+| TUNNEL_ACCESS_TOKEN         | Access token to authenticate requests to the relay     |            |
 | TUNNEL_MAXLEN               | Maximum queue size for a single tunnel                 | 1000       |
 | TUNNEL_BACKPRESSURE         | If backpressure should be enabled by default (1 or 0)  | 1          |
 | TUNNEL_MAX_POLL_TIMEOUT     | Maximum wait time for long polling (seconds)           | 60         |
@@ -86,6 +87,17 @@ Event relay can be configured using the following environmental variables:
 | TUNNEL_DEFAULT_CONTENT_TYPE | Content-Type header to use if not provided by producer | text/plain |
 
 ## Protocol
+
+__Authorization:__
+
+By default relay server is not protected and accepts any requests.
+
+If access token is provided in `TUNNEL_ACCESS_TOKEN` configuration option,
+requests to tunnel endpoints (`/t/...`) will require authorization header:
+
+```
+Authorization: Bearer <access-token>
+```
 
 __Tunnel IDs:__
 

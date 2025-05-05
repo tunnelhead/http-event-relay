@@ -14,9 +14,18 @@ services:
     expose:
       - "80"
     environment:
+      # redis connection
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      # - REDIS_PASSWORD=your_password_if_needed
+      # inherited
+      - REDIS_POOL_SIZE
+      - REDIS_POOL_KEEPALIVE
+      - TUNNEL_ACCESS_TOKEN
+      - TUNNEL_MAXLEN
+      - TUNNEL_BACKPRESSURE
+      - TUNNEL_MAX_POLL_TIMEOUT
+      - TUNNEL_DEFAULT_POLL_TIMEOUT
+      - TUNNEL_DEFAULT_CONTENT_TYPE
     depends_on:
       - redis
 
