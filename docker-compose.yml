@@ -4,15 +4,15 @@ services:
   redis:
     # keydb is a performant drop-in replacement for redis
     image: eqalpha/keydb:alpine
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
 
   tunnel-server:
     build: .
-    ports:
-      - "8080:80"
+    expose:
+      - "80"
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379

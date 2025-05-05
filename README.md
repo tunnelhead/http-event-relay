@@ -36,7 +36,7 @@ git clone https://github.com/tunnelhead/http-event-relay.git
 cd http-event-relay
 docker build -t http-event-relay .
 docker run -p 8080:80 -e REDIS_HOST=my-redis-instance --network=my-network --name test-relay http-event-relay
-curl http://localhost:8080/t/my-secret-tunnel
+curl -s http://localhost:8080/health
 ```
 
 ### Docker Compose
@@ -51,7 +51,7 @@ Example usage:
 git clone https://github.com/tunnelhead/http-event-relay.git
 cd http-event-relay
 docker-compose up -d
-curl http://localhost:8080/t/my-secret-tunnel
+docker run --rm --network http-event-relay_default alpine/curl -s http://tunnel-server/health
 ```
 
 __Development:__
@@ -214,6 +214,26 @@ __Success responses:__
 __Error responses:__
 
 - 500 with text body containing error description, if internal error has occured (see OpenResty log for more details).
+
+### Health check
+
+`GET /health`
+
+This endpoint ensures that OpenResty is up and running. It must always return http code 200 and text "OK".
+
+__Example request:__
+
+```
+curl https://relay.tunnelhead.dev/health
+```
+
+__Example response:__
+
+```
+200 OK
+Content-Type: text/plain
+OK
+```
 
 ## Load testing
 
