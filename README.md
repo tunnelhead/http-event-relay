@@ -109,13 +109,33 @@ A single tunnel provides one-way communiation between two parties (from a produc
 
 For two-way communication, use two tunnels with different ids (one in each direction).
 
+
+__Backpressure:__
+
+With the default configuration, backpressure is enabled by default.
+
+This means that if producer sends messages faster than consumer is able to read them,
+producer will start receiving errors from the relay once queue size limit is reached.
+
+This behaviour can be disabled in configuration or per tunnel on the producer side.
+In this case, if consumer is unable to keep up and queue size limit is reached,
+oldest messages can be discarded even if they are not yet read by the consumer.
+
+It makes sense to disable backpressure if optimising for delivery speed and data loss is acceptable.
+
+__Acknowledgement__:
+
+There is no explicit acknowledegement. When a message is sent to a consumer, it's deleted from the storage instantly.
+
 ### Produce a message
 
 `POST /t/<tunnel-id>` with the request body containing a message in any format.
 
 This endpoint stores `Content-Type` header with the message and sends it to the consumer.
 
-Backpressure can be configured on the consumer side by using a numeric `limit` url parameter: `POST /t/<tunnel-id>?limit=100`.
+Backpressure can be configured on the consumer side by using a numeric `limit` url parameter: `POST /t/<tunnel-id>?limit=100` (in this case, max queue size is set to 100).
+
+Backpressure can be disabled by setting the `limit` to `0`
 
 __Success response:__
 
