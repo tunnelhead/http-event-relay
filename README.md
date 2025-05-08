@@ -293,6 +293,35 @@ __Example response:__
 X-Queue-Size: 3
 ```
 
+### Clean the queue (delete tunnel)
+
+`DELETE /t/<tunnel-id>/all`
+
+Clean all messages from the tunnel, including pending and not yet seen.
+
+This effectively deletes the tunnel.
+
+__Success responses:__
+
+- 204 with empty body. Current queue size (always 0 for this request) can be obtained from `X-Queue-Size` header in the response.
+
+__Error responses:__
+
+- 500 with text body containing error description, if internal error has occured (see OpenResty log for more details).
+
+__Example request:__
+
+```
+curl -X DELETE https://relay.tunnelhead.dev/t/my-secret-tunnel/all
+```
+
+__Example response:__
+
+```
+204 No Content
+X-Queue-Size: 0
+```
+
 ### Health check
 
 `GET /health`

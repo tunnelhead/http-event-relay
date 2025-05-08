@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTTP Event Relay Demo</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #2C3E50; /* Darker page background */
+            font-family: "Tahoma", "Geneva", Verdana, sans-serif;
+            color: #000000;
+            box-sizing: border-box;
+            min-height: 100vh;
+        }
+
+        .page-border-outer {
+            border: 5px solid #008080; /* Teal */
+            padding: 5px;
+            background-color: #B0C4DE; /* LightSteelBlue - space between borders */
+            max-width: 800px;
+            margin: 20px auto;
+            box-shadow: 5px 5px 15px rgba(0,0,0,0.4);
+        }
+
+        .page-border-inner {
+            border: 5px solid #008080; /* Teal */
+            background-color: #B0C4DE; /* LightSteelBlue - main panel background */
+            padding: 25px;
+        }
+
+        .retro-header h1 {
+            margin-top: 0;
+            margin-bottom: 25px;
+            font-size: 28px;
+            color: #000000;
+            text-align: center;
+            border-bottom: 2px solid #708090; /* SlateGray separator */
+            padding-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .box-section {
+            background-color: #C0C0C0; /* Silver */
+            border: 2px solid;
+            border-top-color: #DFDFDF;
+            border-left-color: #DFDFDF;
+            border-bottom-color: #708090; /* SlateGray */
+            border-right-color: #708090; /* SlateGray */
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+
+        .box-section h2 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 20px;
+            color: #000000;
+            border-bottom: 1px solid #708090;
+            padding-bottom: 5px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .retro-input,
+        .retro-textarea {
+            width: 100%;
+            padding: 8px;
+            background-color: #FFFFFF;
+            border: 2px solid;
+            border-top-color: #708090;   /* Darker top */
+            border-left-color: #708090;  /* Darker left */
+            border-bottom-color: #DFDFDF; /* Lighter bottom */
+            border-right-color: #DFDFDF;  /* Lighter right */
+            font-family: inherit;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        .retro-textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .retro-button {
+            padding: 10px 18px;
+            background-color: #C0C0C0; /* Silver */
+            border: 2px solid;
+            border-top-color: #DFDFDF;
+            border-left-color: #DFDFDF;
+            border-bottom-color: #708090;
+            border-right-color: #708090;
+            color: #000000;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            min-width: 150px;
+            text-align: center;
+            box-sizing: border-box;
+            margin-right: 10px;
+            margin-top: 5px;
+        }
+
+        .retro-button:active {
+            border-top-color: #708090;
+            border-left-color: #708090;
+            border-bottom-color: #DFDFDF;
+            border-right-color: #DFDFDF;
+            background-color: #B0B0B0; /* Slightly darker silver */
+        }
+
+        .retro-checkbox-label {
+            font-size: 14px;
+            display: inline-flex; /* Use flexbox for alignment */
+            align-items: center;  /* Vertically center items */
+            cursor: pointer;
+        }
+        .retro-checkbox-label input[type="checkbox"] {
+            margin-right: 8px;
+            appearance: none;
+            -webkit-appearance: none;
+            background-color: #FFF;
+            border: 2px solid;
+            border-top-color: #708090;
+            border-left-color: #708090;
+            border-bottom-color: #DFDFDF;
+            border-right-color: #DFDFDF;
+            width: 16px;
+            height: 16px;
+            position: relative;
+            cursor: pointer;
+            flex-shrink: 0; /* Prevent checkbox from shrinking */
+        }
+        .retro-checkbox-label input[type="checkbox"]:checked {
+            background-color: #C0C0C0; /* Silver */
+        }
+        .retro-checkbox-label input[type="checkbox"]:checked::after {
+            content: '✔';
+            font-size: 12px;
+            color: #000;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .code {
+            padding: 10px;
+            background-color: #000;
+            border: 1px solid #708090; /* SlateGray */
+            color: #36b51d;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .result-area {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #DCDCDC; /* Gainsboro */
+            border: 1px solid #708090; /* SlateGray */
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .result-area p {
+            margin: 5px 0;
+            word-break: break-all;
+        }
+        .result-area pre {
+            background-color: #F5F5F5; /* WhiteSmoke */
+            padding: 8px;
+            border: 1px solid #B0B0B0; /* Darker Silver */
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 12px;
+        }
+        .result-area strong { color: #333; }
+        .result-area .error { color: #D22B2B; font-weight: bold; } /* Firebrick Red */
+        .result-area .success { color: #228B22; font-weight: bold; } /* ForestGreen */
+
+        .copy-button {
+            padding: 3px 8px;
+            font-size: 10px;
+            margin-left: 10px;
+            background-color: #A9A9A9; /* DarkGray */
+            color: white;
+            border: 1px solid #808080;
+            cursor: pointer;
+        }
+        .copy-button:active { background-color: #696969; }
+
+        .retro-footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 2px solid #708090;
+            text-align: center;
+            font-size: 12px;
+            color: #000000;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-border-outer">
+        <div class="page-border-inner">
+            <header class="retro-header">
+                <h1>HTTP Event Relay Demo</h1>
+            </header>
+
+            <main>
+                <section class="box-section" id="config-section">
+                    <h2>Configuration</h2>
+                    <div class="form-group">
+                        <label for="baseUrl">Relay Base URL:</label>
+                        <input type="text" id="baseUrl" class="retro-input">
+                    </div>
+                    <div class="form-group">
+                        <label for="tunnelId">Tunnel ID:</label>
+                        <input type="text" id="tunnelId" class="retro-input" placeholder="e.g., my-secret-tunnel" value="demo">
+                    </div>
+                </section>
+
+                <section class="box-section" id="produce-section">
+                    <h2>1. Produce Message</h2>
+                    <p class="code"><code>POST /t/&lt;tunnel-id&gt;</code></p>
+                    <div class="form-group">
+                        <label for="produceBody">Message Body:</label>
+                        <textarea id="produceBody" class="retro-textarea" rows="4" placeholder="Enter message content..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="produceContentType">Content-Type:</label>
+                        <input type="text" id="produceContentType" class="retro-input" value="text/plain">
+                    </div>
+                    <div class="form-group">
+                        <label for="produceLimit">Backpressure Limit (optional):</label>
+                        <input type="number" id="produceLimit" class="retro-input" placeholder="e.g., 100 (0 to disable)">
+                    </div>
+                    <button type="button" id="btnProduce" class="retro-button">Produce Message</button>
+                    <div class="result-area" id="produceResult">
+                        <p>Waiting for action...</p>
+                    </div>
+                </section>
+
+                <section class="box-section" id="consume-section">
+                    <h2>2. Consume Message (Non-blocking)</h2>
+                    <p class="code"><code>GET /t/&lt;tunnel-id&gt;</code></p>
+                    <div class="form-group">
+                        <label class="retro-checkbox-label">
+                            <input type="checkbox" id="consumePending"> Pending Mode
+                        </label>
+                    </div>
+                    <button type="button" id="btnConsume" class="retro-button">Check for Message</button>
+                    <div class="result-area" id="consumeResult">
+                        <p>Waiting for action...</p>
+                    </div>
+                </section>
+
+                <section class="box-section" id="poll-section">
+                    <h2>3. Consume Message (Long Polling)</h2>
+                    <p class="code"><code>GET /t/&lt;tunnel-id&gt;/poll</code></p>
+                    <div class="form-group">
+                        <label for="pollTimeout">Timeout (seconds, optional):</label>
+                        <input type="number" id="pollTimeout" class="retro-input" placeholder="e.g., 10">
+                    </div>
+                    <div class="form-group">
+                        <label class="retro-checkbox-label">
+                            <input type="checkbox" id="pollPending"> Pending Mode
+                        </label>
+                    </div>
+                    <button type="button" id="btnPoll" class="retro-button">Poll for Message</button>
+                    <div class="result-area" id="pollResult">
+                        <p>Waiting for action...</p>
+                    </div>
+                </section>
+
+                <section class="box-section" id="ack-section">
+                    <h2>4. Acknowledge Message</h2>
+                    <p class="code"><code>DELETE /t/&lt;tunnel-id&gt;/&lt;message-id&gt;</code></p>
+                    <div class="form-group">
+                        <label for="ackMessageId">Message ID to Acknowledge:</label>
+                        <input type="text" id="ackMessageId" class="retro-input" placeholder="Enter message ID from received message">
+                    </div>
+                    <button type="button" id="btnAck" class="retro-button">Acknowledge Message</button>
+                    <div class="result-area" id="ackResult">
+                        <p>Waiting for action...</p>
+                    </div>
+                </section>
+
+                <section class="box-section" id="len-section">
+                    <h2>5. Get Queue Size</h2>
+                    <p class="code"><code>GET /t/&lt;tunnel-id&gt;/len</code></p>
+                    <button type="button" id="btnLen" class="retro-button">Get Queue Size</button>
+                    <div class="result-area" id="lenResult">
+                        <p>Waiting for action...</p>
+                    </div>
+                </section>
+
+                <section class="box-section" id="clean-section">
+                    <h2>5. Clean Queue (Delete Tunnel)</h2>
+                    <p class="code"><code>DELETE /t/&lt;tunnel-id&gt;/all</code></p>
+                    <button type="button" id="btnClean" class="retro-button">Clean Queue</button>
+                    <div class="result-area" id="cleanResult">
+                        <p>Waiting for action...</p>
+                    </div>
+                </section>
+            </main>
+
+            <footer class="retro-footer">
+                <p>&copy; <span id="currentYear"></span> tunnelhead.dev. API interactions are live.</p>
+            </footer>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('baseUrl').value = window.location.origin;
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+
+        const getBaseUrl = () => document.getElementById('baseUrl').value.trim();
+        const getTunnelId = () => document.getElementById('tunnelId').value.trim();
+
+        function displayResult(elementId, data) {
+            const resultEl = document.getElementById(elementId);
+            let html = `<p><strong>Status:</strong> ${data.status} ${data.statusText}</p>`;
+            if (data.messageId) {
+                html += `<p><strong>X-Message-Id:</strong> <span id="msgId-${elementId}">${data.messageId}</span>
+                         <button class="copy-button retro-button" onclick="copyToClipboard('msgId-${elementId}')">Copy ID</button>
+                         </p>`;
+            }
+            if (data.contentType) { // Only for consume/poll
+                html += `<p><strong>Content-Type:</strong> ${data.contentType}</p>`;
+            }
+            if (data.queueSize) {
+                html += `<p><strong>X-Queue-Size:</strong> ${data.queueSize}</p>`;
+            }
+
+            if (data.body !== undefined && data.body !== null && data.body !== '') {
+                html += `<p><strong>Body:</strong></p><pre>${escapeHtml(data.body)}</pre>`;
+            } else if (data.status === 201) {
+                 html += `<p class="success">Message produced successfully (201 Created).</p>`;
+            } else if (data.status === 204) {
+                html += `<p class="success">Operation successful, no content (204).</p>`;
+            }
+
+             if (data.error) {
+                html += `<p class="error"><strong>Error:</strong> ${escapeHtml(data.error)}</p>`;
+            }
+            resultEl.innerHTML = html;
+        }
+
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') {
+                try {
+                    unsafe = JSON.stringify(unsafe, null, 2);
+                } catch (e) {
+                    unsafe = String(unsafe);
+                }
+            }
+            return unsafe
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+
+        function copyToClipboard(elementId) {
+            const text = document.getElementById(elementId)?.innerText;
+            if (text) {
+                navigator.clipboard.writeText(text).then(() => {
+                    console.log('Message ID copied to clipboard!');
+                }).catch(err => {
+                    console.error('Failed to copy: ', err);
+                    alert('Failed to copy Message ID.');
+                });
+            }
+        }
+
+        async function makeApiCall(url, method = 'GET', resultElementId, isPending = false) {
+            const resultEl = document.getElementById(resultElementId);
+            resultEl.innerHTML = '<p>Loading...</p>';
+
+            try {
+                const response = await fetch(url, { method: method });
+                const status = response.status;
+                const statusText = response.statusText;
+                const messageId = response.headers.get('X-Message-Id');
+                const contentType = response.headers.get('Content-Type');
+                const queueSize = response.headers.get('X-Queue-Size');
+
+                let responseBodyText = await response.text();
+                let bodyToDisplay = responseBodyText;
+
+                if (contentType && contentType.includes('application/json') && responseBodyText) {
+                    try {
+                        const jsonBody = JSON.parse(responseBodyText);
+                        bodyToDisplay = JSON.stringify(jsonBody, null, 2);
+                    } catch (e) { /* Not valid JSON, display as text */ }
+                }
+
+                displayResult(resultElementId, {
+                    status, statusText, messageId, contentType, queueSize,
+                    body: bodyToDisplay,
+                    error: status >= 400 ? responseBodyText : null
+                });
+
+                if (messageId && (resultElementId === 'consumeResult' || resultElementId === 'pollResult')) {
+                    document.getElementById('ackMessageId').value = isPending ? messageId : '';
+                }
+
+            } catch (error) {
+                console.error('API Call Error:', error);
+                displayResult(resultElementId, { status: 'Network Error', statusText: '', error: error.message });
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('btnConsume').addEventListener('click', () => {
+            const baseUrl = getBaseUrl();
+            const tunnelId = getTunnelId();
+            if (!tunnelId) {
+                 displayResult('consumeResult', { status: 'Error', statusText: '', error: 'Tunnel ID is required.' });
+                return;
+            }
+            const pending = document.getElementById('consumePending').checked;
+            let url = `${baseUrl}/t/${tunnelId}`;
+            if (pending) {
+                url += '?pending';
+            }
+            makeApiCall(url, 'GET', 'consumeResult', pending);
+        });
+
+        document.getElementById('btnPoll').addEventListener('click', () => {
+            const baseUrl = getBaseUrl();
+            const tunnelId = getTunnelId();
+             if (!tunnelId) {
+                 displayResult('pollResult', { status: 'Error', statusText: '', error: 'Tunnel ID is required.' });
+                return;
+            }
+            const timeout = document.getElementById('pollTimeout').value;
+            const pending = document.getElementById('pollPending').checked;
+            let url = `${baseUrl}/t/${tunnelId}/poll`;
+            const params = [];
+            if (timeout) {
+                params.push(`timeout=${timeout}`);
+            }
+            if (pending) {
+                params.push('pending');
+            }
+            if (params.length > 0) {
+                url += `?${params.join('&')}`;
+            }
+            makeApiCall(url, 'GET', 'pollResult', pending);
+        });
+
+        document.getElementById('btnProduce').addEventListener('click', async () => {
+            const baseUrl = getBaseUrl();
+            const tunnelId = getTunnelId();
+            if (!tunnelId) {
+                displayResult('produceResult', { status: 'Error', statusText: '', error: 'Tunnel ID is required.' });
+                return;
+            }
+
+            const messageBody = document.getElementById('produceBody').value;
+            const contentType = document.getElementById('produceContentType').value.trim();
+            const limit = document.getElementById('produceLimit').value.trim();
+
+            if (!contentType) {
+                displayResult('produceResult', { status: 'Error', statusText: '', error: 'Content-Type is required for producing messages.' });
+                return;
+            }
+
+            let url = `${baseUrl}/t/${tunnelId}`;
+            if (limit !== "") {
+                url += `?limit=${limit}`;
+            }
+
+            const resultEl = document.getElementById('produceResult');
+            resultEl.innerHTML = '<p>Sending...</p>';
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': contentType
+                    },
+                    body: messageBody
+                });
+
+                const status = response.status;
+                const statusText = response.statusText;
+                const messageId = response.headers.get('X-Message-Id');
+                const queueSize = response.headers.get('X-Queue-Size');
+                let responseBodyText = '';
+
+                // Only attempt to read body for error statuses or non-201/204 success
+                if (status >= 400 || (status >= 200 && status !== 201 && status !== 204) ) {
+                     responseBodyText = await response.text();
+                }
+
+                document.getElementById('ackMessageId').value = '';
+
+                displayResult('produceResult', {
+                    status,
+                    statusText,
+                    messageId,
+                    queueSize,
+                    body: responseBodyText,
+                    error: status >= 400 ? responseBodyText : null
+                });
+
+            } catch (error) {
+                console.error('API Call Error (Produce):', error);
+                displayResult('produceResult', { status: 'Network Error', statusText: '', error: error.message });
+            }
+        });
+
+
+        document.getElementById('btnAck').addEventListener('click', () => {
+            const baseUrl = getBaseUrl();
+            const tunnelId = getTunnelId();
+            const messageId = document.getElementById('ackMessageId').value.trim();
+            if (!tunnelId || !messageId) {
+                displayResult('ackResult', { status: 'Error', statusText: '', error: 'Tunnel ID and Message ID are required.' });
+                return;
+            }
+            const url = `${baseUrl}/t/${tunnelId}/${messageId}`;
+            makeApiCall(url, 'DELETE', 'ackResult');
+        });
+
+        document.getElementById('btnLen').addEventListener('click', () => {
+            const baseUrl = getBaseUrl();
+            const tunnelId = getTunnelId();
+            if (!tunnelId) {
+                 displayResult('lenResult', { status: 'Error', statusText: '', error: 'Tunnel ID is required.' });
+                return;
+            }
+            const url = `${baseUrl}/t/${tunnelId}/len`;
+            makeApiCall(url, 'GET', 'lenResult');
+        });
+
+        document.getElementById('btnClean').addEventListener('click', () => {
+            const baseUrl = getBaseUrl();
+            const tunnelId = getTunnelId();
+            if (!tunnelId) {
+                 displayResult('cleanResult', { status: 'Error', statusText: '', error: 'Tunnel ID is required.' });
+                return;
+            }
+            const url = `${baseUrl}/t/${tunnelId}/all`;
+            makeApiCall(url, 'DELETE', 'cleanResult');
+        });
+
+    </script>
+</body>
+</html>

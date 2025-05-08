@@ -15,8 +15,12 @@ local function get_consumer_id(tunnel_id)
     return "c-" .. tunnel_id
 end
 
-local function check_access_token()
+local function check_access_token(tunnel_id)
     if not tunnel_config.token then
+        return nil
+    end
+
+    if tunnel_config.demo_tunnel_id and tunnel_id == tunnel_config.demo_tunnel_id then
         return nil
     end
 
@@ -32,12 +36,7 @@ local function check_access_token()
     end
 end
 
-local _M = {}
-
--- POST a message to a tunnel
-function _M.post_message()
-    check_access_token()
-
+local function get_validated_tunnel_id()
     local tunnel_id = ngx.var.tunnel_id
     if not tunnel_id then
         ngx.status = 400
@@ -45,15 +44,44 @@ function _M.post_message()
         return ngx.exit(400)
     end
 
+    check_access_token(tunnel_id)
+
+    return tunnel_id
+end
+
+local function get_redis_connection()
+    local red, err = redis_conn.get_connection()
+    if not red then
+        return release_and_exit(red, 500, "Redis connection error")
+    end
+    return red
+end
+
+local function release_and_exit(red, status_code, message)
+    if red ~= nil then
+        redis_conn.release_connection(red)
+    end
+
+    ngx.status = status_code
+    if message ~= nil then
+        ngx.print(message)
+    end
+    return ngx.exit(status_code)
+end
+
+local _M = {}
+
+-- POST a message to a tunnel
+function _M.post_message()
+    local tunnel_id = get_validated_tunnel_id()
+
     local limit = tonumber(ngx.req.get_uri_args().limit)
     local enable_backpressure = limit == nil and tunnel_config.enable_backpressure or limit > 0
     if limit == nil or limit <= 0 then
         limit = tunnel_config.maxlen
     end
     if limit > tunnel_config.maxlen then
-        ngx.status = 400
-        ngx.print("Limit must be less than the tunnel max length")
-        return ngx.exit(400)
+        return release_and_exit(nil, 400, "Limit must be less than the tunnel max length")
     end
 
     -- Get request body
@@ -75,17 +103,9 @@ function _M.post_message()
     end
 
     local content_type = ngx.req.get_headers()["Content-Type"]
-
-    -- Connect to Redis
-    local red, err = redis_conn.get_connection()
-    if not red then
-        ngx.status = 500
-        ngx.print("Redis connection error")
-        return ngx.exit(500)
-    end
-
-    -- Add message to the stream
     local stream_key = get_stream_key(tunnel_id)
+
+    local red = get_redis_connection()
 
     -- Check size limit
     local len
@@ -94,17 +114,11 @@ function _M.post_message()
         len, err = red:xlen(stream_key)
         if err then
             ngx.log(ngx.ERR, "Failed to get stream length '", stream_key, "': ", err)
-            ngx.status = 500
-            ngx.print("Failed to get stream length")
-            redis_conn.release_connection(red)
-            return ngx.exit(500)
+            return release_and_exit(red, 500, "Failed to get stream length")
         end
         if len >= limit then
-            ngx.status = 507
             ngx.header["X-Queue-Size"] = len
-            ngx.print("Queue limit reached, consumers are not keeping up")
-            redis_conn.release_connection(red)
-            return ngx.exit(507)
+            return release_and_exit(red, 507, "Queue limit reached, consumers are not keeping up")
         end
     end
 
@@ -115,35 +129,22 @@ function _M.post_message()
         msg_id, err = red:xadd(stream_key, "MAXLEN", "~", limit, "*", "data", body)
     end
 
-    redis_conn.release_connection(red)
-
     if not msg_id then
         ngx.log(ngx.ERR, "Failed to add message to stream: ", err)
-        ngx.status = 500
-        ngx.print("Failed to store message")
-        return ngx.exit(500)
+        return release_and_exit(red, 500, "Failed to store message")
     end
 
     -- Return success
-    ngx.status = 201
     ngx.header["X-Message-Id"] = msg_id
     if len ~= nil then
         ngx.header["X-Queue-Size"] = len + 1
     end
-    return ngx.exit(201)
+    return release_and_exit(red, 201, nil)
 end
 
 -- Common logic for reading messages
-local function read_message(tunnel_id, block_timeout)
-    local use_pending = ngx.req.get_uri_args().pending ~= nil
-
-    -- Connect to Redis
-    local red, err = redis_conn.get_connection()
-    if not red then
-        ngx.status = 500
-        ngx.print("Redis connection error")
-        return ngx.exit(500)
-    end
+local function read_message(tunnel_id, block_timeout, use_pending)
+    local red = get_redis_connection()
 
     local stream_key = get_stream_key(tunnel_id)
     local group_name = get_consumer_group(tunnel_id)
@@ -152,14 +153,10 @@ local function read_message(tunnel_id, block_timeout)
     local msg_id, msg_fields
 
     if use_pending then
-        -- XAUTOCLAIM key group consumer min-idle-time start [COUNT count]
         local result, err = red:xautoclaim(stream_key, group_name, consumer_id, 0, "0-0", "COUNT", 1)
         if err and string.sub(err,1,7) ~= "NOGROUP" then
             ngx.log(ngx.ERR, "Failed to claim pending from stream '", stream_key, "' id ", msg_id, ": ", err)
-            ngx.status = 500
-            ngx.print("Error getting pending messages")
-            redis_conn.release_connection(red)
-            return ngx.exit(500)
+            return release_and_exit(red, 500, "Error getting pending messages")
         end
 
         if result and next(result[2]) then
@@ -191,10 +188,7 @@ local function read_message(tunnel_id, block_timeout)
                 create_result, err = red:xgroup("CREATE", stream_key, group_name, 0, "MKSTREAM")
                 if err then
                     ngx.log(ngx.ERR, "Failed to create stream '", stream_key, "' group '", group_name, "': ", err)
-                    ngx.status = 500
-                    ngx.print("Error reading from stream")
-                    redis_conn.release_connection(red)
-                    return ngx.exit(500)
+                    return release_and_exit(red, 500, "Error reading from stream")
                 end
             else
                 break
@@ -203,17 +197,12 @@ local function read_message(tunnel_id, block_timeout)
 
         if err then
             ngx.log(ngx.ERR, "Failed to read from stream '", stream_key, "': ", err)
-            ngx.status = 500
-            ngx.print("Error reading from stream")
-            redis_conn.release_connection(red)
-            return ngx.exit(500)
+            return release_and_exit(red, 500, "Error reading from stream")
         end
 
         if not result or result == ngx.null then
             -- No new messages
-            ngx.status = 204 -- No Content
-            redis_conn.release_connection(red)
-            return ngx.exit(204)
+            return release_and_exit(red, 204, nil) -- No Content
         end
 
         -- Get the message ID and data
@@ -226,10 +215,7 @@ local function read_message(tunnel_id, block_timeout)
         local del_result, err = red:xdel(stream_key, msg_id)
         if err then
             ngx.log(ngx.ERR, "Failed to delete from stream '", stream_key, "' id ", msg_id, ": ", err)
-            ngx.status = 500
-            ngx.print("Error reading from stream")
-            redis_conn.release_connection(red)
-            return ngx.exit(500)
+            return release_and_exit(red, 500, "Error reading from stream")
         end
     end
 
@@ -261,28 +247,16 @@ end
 
 -- GET a message from a tunnel (non-blocking)
 function _M.get_message()
-    check_access_token()
+    local tunnel_id = get_validated_tunnel_id()
+    local use_pending = ngx.req.get_uri_args().pending ~= nil
 
-    local tunnel_id = ngx.var.tunnel_id
-    if not tunnel_id then
-        ngx.status = 400
-        ngx.print("Tunnel ID is required")
-        return ngx.exit(400)
-    end
-
-    return read_message(tunnel_id, 0)
+    return read_message(tunnel_id, 0, use_pending)
 end
 
 -- GET messages using long polling
 function _M.poll_message()
-    check_access_token()
-
-    local tunnel_id = ngx.var.tunnel_id
-    if not tunnel_id then
-        ngx.status = 400
-        ngx.print("Tunnel ID is required")
-        return ngx.exit(400)
-    end
+    local tunnel_id = get_validated_tunnel_id()
+    local use_pending = ngx.req.get_uri_args().pending ~= nil
 
     -- Get timeout in seconds
     local timeout = tonumber(ngx.req.get_uri_args().timeout) or tunnel_config.def_poll_timeout
@@ -290,19 +264,12 @@ function _M.poll_message()
         timeout = tunnel_config.max_poll_timeout
     end
 
-    return read_message(tunnel_id, timeout)
+    return read_message(tunnel_id, timeout, use_pending)
 end
 
 -- DELETE a message from a tunnel (acknowledge)
 function _M.ack_message()
-    check_access_token()
-
-    local tunnel_id = ngx.var.tunnel_id
-    if not tunnel_id then
-        ngx.status = 400
-        ngx.print("Tunnel ID is required")
-        return ngx.exit(400)
-    end
+    local tunnel_id = get_validated_tunnel_id()
 
     local msg_id = ngx.var.msg_id
     if not msg_id then
@@ -311,13 +278,7 @@ function _M.ack_message()
         return ngx.exit(400)
     end
 
-    -- Connect to Redis
-    local red, err = redis_conn.get_connection()
-    if not red then
-        ngx.status = 500
-        ngx.print("Redis connection error")
-        return ngx.exit(500)
-    end
+    local red = get_redis_connection()
 
     local stream_key = get_stream_key(tunnel_id)
     local group_name = get_consumer_group(tunnel_id)
@@ -326,62 +287,55 @@ function _M.ack_message()
     local res, err = red:xack(stream_key, group_name, msg_id)
     if err then
         ngx.log(ngx.ERR, "Failed to acknowledge '", stream_key, "' id ", msg_id, ": ", err)
-        ngx.status = 500
-        ngx.print("Failed to acknowledge message")
-        redis_conn.release_connection(red)
-        return ngx.exit(500)
+        return release_and_exit(red, 500, "Failed to acknowledge message")
     end
 
     -- Delete acknowledged message from stream
     local res, err = red:xdel(stream_key, msg_id)
     if err then
         ngx.log(ngx.ERR, "Failed to delete from stream '", stream_key, "' id ", msg_id, ": ", err)
-        ngx.status = 500
-        ngx.print("Failed to acknowledge message")
-        redis_conn.release_connection(red)
-        return ngx.exit(500)
+       return release_and_exit(red, 500, "Failed to acknowledge message")
     end
 
-    ngx.status = 204 -- No Content
-    redis_conn.release_connection(red)
-    return ngx.exit(204)
+    return release_and_exit(red, 204, nil) -- No Content
 end
 
 -- GET queue length for the tunnel
 function _M.get_length()
-    check_access_token()
+    local tunnel_id = get_validated_tunnel_id()
 
-    local tunnel_id = ngx.var.tunnel_id
-    if not tunnel_id then
-        ngx.status = 400
-        ngx.print("Tunnel ID is required")
-        return ngx.exit(400)
-    end
-
-    -- Connect to Redis
-    local red, err = redis_conn.get_connection()
-    if not red then
-        ngx.status = 500
-        ngx.print("Redis connection error")
-        return ngx.exit(500)
-    end
+    local red = get_redis_connection()
 
     local stream_key = get_stream_key(tunnel_id)
 
     local len, err = red:xlen(stream_key)
-    redis_conn.release_connection(red)
 
     if err then
         ngx.log(ngx.ERR, "Failed to get stream length '", stream_key, "': ", err)
-        ngx.status = 500
-        ngx.print("Failed to get stream length")
-        return ngx.exit(500)
+        return release_and_exit(red, 500, "Failed to get stream length")
     end
 
     -- Return the length
-    ngx.status = 204
     ngx.header["X-Queue-Size"] = len
-    return ngx.exit(204)
+    return release_and_exit(red, 204, nil) -- No Content
+end
+
+-- DELETE tunnel to clean the queue
+function _M.clean_queue()
+    local tunnel_id = get_validated_tunnel_id()
+
+    local red = get_redis_connection()
+
+    local stream_key = get_stream_key(tunnel_id)
+
+    local res, err = red:del(stream_key)
+    if err then
+        ngx.log(ngx.ERR, "Failed to delete stream '", stream_key, "': ", err)
+        return release_and_exit(red, 500, "Error cleaning the queue")
+    end
+
+    ngx.header["X-Queue-Size"] = 0
+    return release_and_exit(red, 204, nil) -- No Content
 end
 
 return _M

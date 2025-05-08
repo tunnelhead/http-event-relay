@@ -15,12 +15,15 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - TUNNEL_ACCESS_TOKEN=thisisasecret
+      - TUNNEL_DEMO_ID=demo
     depends_on:
       - redis
     # mount lua dir and disable cache for faster development
     volumes:
       - ./src:/usr/local/openresty/lua
       - ./conf/conf.d/dev.conf:/etc/nginx/conf.d/dev.conf
+      - ./demo:/var/www/demo
 
 volumes:
   redis_data:
