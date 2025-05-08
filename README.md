@@ -4,6 +4,8 @@ One to one message delivery system.
 
 Built on top of OpenResty and KeyDB, inheriting their scalability and performance.
 
+[Fancy Live Demo!](https://relay.tunnelhead.dev/demo/)
+
 ## Original purpose
 
 Easy communication between two parties behind NAT.
@@ -85,6 +87,10 @@ Event relay can be configured using the following environmental variables:
 | TUNNEL_MAX_POLL_TIMEOUT     | Maximum wait time for long polling (seconds)           | 60         |
 | TUNNEL_DEFAULT_POLL_TIMEOUT | Default wait time for long polling (seconds)           | 30         |
 | TUNNEL_DEFAULT_CONTENT_TYPE | Content-Type header to use if not provided by producer | text/plain |
+
+### Limits
+
+Max message size is set to 128kb by default using `client_max_body_size` option in [nginx.conf](conf/nginx.conf).
 
 ## Protocol
 
