@@ -22,6 +22,7 @@ _Because you can't be a Tunnelhead without tunnels_
 - __Event__ - a detectable occurrence which causes a message to be sent
 - __Queue__ - a list of messages sent by one party, but not yet accepted by a second party
 - __Backpressure__ - a mechanism, which production of new messages when queue is congested
+- __Pending__ - a message, which was accepted by a second party, but not yet processed
 
 ## How to run
 
@@ -67,8 +68,11 @@ Once container is running, any changes in `src` directory will be reflected imme
 git clone https://github.com/tunnelhead/http-event-relay.git
 cd http-event-relay
 docker-compose -f 'docker-compose.dev.yml' up -d
-curl http://localhost:8080/t/my-secret-tunnel
+curl http://localhost:8080/health
+curl -v -H "Authorization: Bearer thisisasecret" http://localhost:8080/t/my-secret-tunnel
 ```
+
+Development version has demo enabled by default http://localhost:8080/demo/
 
 ### Configuration options
 
@@ -175,7 +179,7 @@ __Error responses:__
 __Example request:__
 
 ```
-curl -d '{"text": "Hello, World!"}' -H "Content-Type: application/json" -X POST https://relay.tunnelhead.dev/t/my-secret-tunnel
+curl -d '{"text": "Hello, World!"}' -H "Content-Type: application/json" -X POST https://relay.tunnelhead.dev/t/demo
 ```
 
 __Example response:__
@@ -208,7 +212,7 @@ __Error responses:__
 __Example request:__
 
 ```
-curl https://relay.tunnelhead.dev/t/my-secret-tunnel
+curl -v https://relay.tunnelhead.dev/t/demo
 ```
 
 __Example response:__
@@ -261,7 +265,7 @@ __Error responses:__
 __Example request:__
 
 ```
-curl -X DELETE https://relay.tunnelhead.dev/t/my-secret-tunnel/1746483376267-0
+curl -X DELETE https://relay.tunnelhead.dev/t/demo/1746483376267-0
 ```
 
 __Example response:__
@@ -289,7 +293,7 @@ __Error responses:__
 __Example request:__
 
 ```
-curl https://relay.tunnelhead.dev/t/my-secret-tunnel/len
+curl -v https://relay.tunnelhead.dev/t/demo/len
 ```
 
 __Example response:__
@@ -318,7 +322,7 @@ __Error responses:__
 __Example request:__
 
 ```
-curl -X DELETE https://relay.tunnelhead.dev/t/my-secret-tunnel/all
+curl -X DELETE https://relay.tunnelhead.dev/t/demo/all
 ```
 
 __Example response:__
