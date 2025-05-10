@@ -74,6 +74,18 @@ curl -v -H "Authorization: Bearer thisisasecret" http://localhost:8080/t/my-secr
 
 Development version has demo enabled by default http://localhost:8080/demo/
 
+__Tests:__
+
+When development containers are up and running, you can execute some automatic tests to validate the changes.
+
+NodeJs is required to run the tests.
+
+```
+cd tests
+npm install
+npm run tests
+```
+
 ### Configuration options
 
 Event relay can be configured using the following environmental variables:
@@ -91,6 +103,7 @@ Event relay can be configured using the following environmental variables:
 | TUNNEL_MAX_POLL_TIMEOUT     | Maximum wait time for long polling (seconds)           | 60         |
 | TUNNEL_DEFAULT_POLL_TIMEOUT | Default wait time for long polling (seconds)           | 30         |
 | TUNNEL_DEFAULT_CONTENT_TYPE | Content-Type header to use if not provided by producer | text/plain |
+| TUNNEL_REPLY_TTL            | How much seconds to keep a message reply               | 3600       |
 
 ### Limits
 
@@ -98,7 +111,7 @@ Max message size is set to 128kb by default using `client_max_body_size` option 
 
 ## Protocol
 
-__Authorization:__
+### Authorization
 
 By default relay server is not protected and accepts any requests.
 
@@ -109,7 +122,7 @@ requests to tunnel endpoints (`/t/...`) will require authorization header:
 Authorization: Bearer <access-token>
 ```
 
-__Tunnel IDs:__
+### Tunnel IDs
 
 Protocol description mentions `<tunnel-id>` in urls, which must be replaced with user-selected identifier.
 
@@ -125,14 +138,15 @@ Acceptable characters in the identifier:
 
 Tunnel IDs can be up to 1024 characters long.
 
-__Two-Way Communication:__
+### Two-Way Communication
 
-A single tunnel provides one-way communiation between two parties (from a producer to a consumer).
+A single tunnel provides one-way communiation between two parties (from a producer to a consumer)
+with optional replies on [acknowledgement](#acknowledgement).
 
-For two-way communication, use two tunnels with different ids (one in each direction).
+For robust two-way communication, use two tunnels with different ids (one in each direction).
 
 
-__Backpressure:__
+### Backpressure
 
 With the default configuration, backpressure is enabled by default.
 
@@ -145,210 +159,535 @@ oldest messages can be discarded even if they are not yet read by the consumer.
 
 It makes sense to disable backpressure if optimising for delivery speed and data loss is acceptable.
 
-__Acknowledgement__:
+### Acknowledgement
 
 By default the consumed message is automatically acknowledged and deleted.
 
 However, if using pending mode on the consumer, the relay will keep returning the same message over and over again,
-until it's manually acknowledged (deleted).
+until it's manually [acknowledged](#3-acknowledge-a-message).
 
-### Produce a message
+Alternatively, it's possible to [acknowledge with reply](#4-acknowledge-with-reply) to send some information back to the producer.
+Producer then must [read](#read-reply-non-blocking) or [poll](#read-reply-long-polling) for the reply.
 
-`POST /t/<tunnel-id>` with the request body containing a message in any format.
+Replies are stored for limited time (as [configured](#configuration-options)) and removed immediately after read.
+If more reliable way is required, consider using a separate tunnel for communication in other direction.
 
-This endpoint stores `Content-Type` header with the message and sends it to the consumer.
+## Endpoints
 
-Backpressure can be configured on the consumer side by using a numeric `limit` url parameter: `POST /t/<tunnel-id>?limit=100` (in this case, max queue size is set to 100).
+- [Common Placeholders](#common-placeholders)
+- [Common Errors](#common-errors)
+- [1. Produce a Message](#1-produce-a-message)
+- [2. Consume Messages](#2-consume-messages)
+  - [Consume a Message (Non-blocking)](#consume-a-message-non-blocking)
+  - [Consume a Message (Long Polling)](#consume-a-message-long-polling)
+- [3. Acknowledge a Message](#3-acknowledge-a-message)
+- [4. Acknowledge with Reply](#4-acknowledge-with-reply)
+- [5. Read Message Reply](#5-read-message-reply)
+  - [Read Reply (Non-blocking)](#read-reply-non-blocking)
+  - [Read Reply (Long Polling)](#read-reply-long-polling)
+- [6. Get Message Status](#6-get-message-status)
+- [7. Get Queue Size](#7-get-queue-size)
+- [8. Clear Tunnel (Delete All Messages)](#8-clear-tunnel-delete-all-messages)
+- [9. Health Check](#9-health-check)
 
-Backpressure can be disabled by setting the `limit` to `0`
+### Common Placeholders
 
-__Success response:__
+-   `<tunnel-id>`: A unique string identifying a specific tunnel.
+-   `<message-id>`: A unique string identifying a specific message within a tunnel.
 
-201 with empty body.
+### Common Errors
 
-Created message id can be obtained from `X-Message-Id` header in the response.
+Generally, these errors can occur on any endpoint.
 
-If backpressure is enabled, current queue size can be obtained from `X-Queue-Size` header in the response.
+| Status Code                | Description |
+| :------------------------- | :------------------------- |
+| `400 Bad Request`          | Invalid URL or parameter provided. |
+| `500 Internal Server Error`| Internal error occurred. The response body contains an error description. See OpenResty log for more details. |
 
-__Error responses:__
+### 1. Produce a Message
 
-- 400 if invalid url or parameter is provided.
-- 500 with text body containing error description, if internal error has occured (see OpenResty log for more details).
-- 507 in case of backpressure (if queue size limit reached), current queue size can be obtained from `X-Queue-Size` header in the response.
+`POST /t/<tunnel-id>`
 
-__Example request:__
+Stores a message in the specified tunnel. The `Content-Type` header of the request is stored with the message and sent to the consumer.
 
+#### URL Parameters
+
+| Parameter | Type    | Description | Required | Default |
+| :-------- | :------ | :---------- | :------- | :------ |
+| `limit`   | Integer | Sets the maximum queue size for backpressure. A value of `0` disables backpressure. | No | As [configured](#configuration-options) |
+
+#### Request Headers
+
+| Header         | Description                     | Example            | Required | Default  |
+| :------------- | :------------------------------ | :----------------- | :------- | :------- |
+| `Content-Type` | The format of the message body. | `application/json` | No       | As [configured](#configuration-options) |
+
+#### Response Headers
+
+| Header         | Description                                                        | Example           |
+| :------------- | :----------------------------------------------------------------- | :---------------- |
+| `X-Message-Id` | The ID of the created message.                                     | `1746450313373-0` |
+| `X-Queue-Size` | Current queue size (returned if backpressure is enabled via `limit`). | `1`               |
+
+#### Responses
+
+**Success:**
+
+| Status Code   | Description                                |
+| :------------ | :----------------------------------------- |
+| `201 Created` | Message successfully produced. Empty body. |
+
+**Errors:**
+
+| Status Code                | Description |
+| :------------------------- | :------------------------- |
+| `507 Insufficient Storage` | Backpressure enabled and queue size limit reached. `X-Queue-Size` header indicates the current queue size.   |
+
+#### Example
+
+**Request:**
+
+```bash
+curl -d '{"text": "Hello, World!"}' \
+     -H "Content-Type: application/json" \
+     -X POST https://relay.tunnelhead.dev/t/demo?limit=100
 ```
-curl -d '{"text": "Hello, World!"}' -H "Content-Type: application/json" -X POST https://relay.tunnelhead.dev/t/demo
-```
 
-__Example response:__
+**Response:**
 
-```
-201 Created
+```http
+HTTP/1.1 201 Created
 X-Message-Id: 1746450313373-0
 X-Queue-Size: 1
 ```
 
-### Consume a message
+---
+
+### 2. Consume Messages
+
+#### Consume a Message (Non-blocking)
 
 `GET /t/<tunnel-id>`
 
-This endpoint checks for new messages in the tunnel in a non-blocking manner.
-The request will be complete immediately.
+Checks for new messages in the tunnel in a non-blocking manner. The request completes immediately.
 
-Pending mode can be enabled by adding `pending` url parameter: `GET /t/<tunnel-id>?pending`.
-In pending mode, message has to be acknowledged (deleted) manually using acknowledgement endpoint.
+#### URL Parameters
 
-__Success responses:__
+| Parameter | Type | Description                                                                                                | Required |
+| :-------- | :--- | :--------------------------------------------------------------------------------------------------------- | :------- |
+| `pending` | Flag | If present, the consumed message is not automatically deleted and must be [acknowledged](#3-acknowledge-a-message) manually. | No       |
 
-- 204 with empty body if no new messages were found.
-- 200 with body containing the new message. Content type can be obtained from `Content-Type` header in the response. Message id can be obtained from `X-Message-Id` header in the response.
+#### Response Headers
 
-__Error responses:__
+| Header         | Description                        | Example            |
+| :------------- | :--------------------------------- | :----------------- |
+| `Content-Type` | The format of the message body.    | `application/json` |
+| `X-Message-Id` | The ID of the consumed message.    | `1746450313373-0`  |
 
-- 500 with text body containing error description, if internal error has occured (see OpenResty log for more details).
+#### Responses
 
-__Example request:__
+**Success:**
 
-```
+| Status Code      | Description |
+| :--------------- | :---------- |
+| `200 OK`         | New message found. The response body contains the message. `Content-Type` and `X-Message-Id` are present. |
+| `204 No Content` | No new messages were found. Empty body. |
+
+#### Example
+
+**Request:**
+
+```bash
 curl -v https://relay.tunnelhead.dev/t/demo
 ```
 
-__Example response:__
+**Response (if message exists):**
 
-```
-200 OK
+```http
+HTTP/1.1 200 OK
 X-Message-Id: 1746450313373-0
 Content-Type: application/json
 Content-Length: 25
+
 {"text": "Hello, World!"}
 ```
 
-### Consume a message (long polling)
+**Response (if no message):**
+
+```http
+HTTP/1.1 204 No Content
+```
+
+---
+
+#### Consume a Message (Long Polling)
 
 `GET /t/<tunnel-id>/poll`
 
-This endpoint checks for new messages in the tunnel in a blocking manner.
-The request will be complete when a new message appears or if timeout reached, whatever comes first.
+Checks for new messages in the tunnel in a blocking manner. The request will complete when a new message appears or if a timeout is reached, whichever comes first.
 
-Timeout can be customised by providing a number of seconds in the `timeout` url parameter: `GET /t/<tunnel-id>/poll?timeout=10`. If timeout is larger than max timeout configured for the relay instance, a max timeout will be used instead.
+#### URL Parameters
 
-Pending mode can be enabled by adding `pending` url parameter: `GET /t/<tunnel-id>/poll?pending`.
-In pending mode, message has to be acknowledged (deleted) manually using acknowledgement endpoint.
+| Parameter | Type    | Description  | Required | Default        |
+| :-------- | :------ | :----------- | :------- | :------------- |
+| `timeout` | Integer | Timeout in seconds. If larger than the max timeout configured for the relay instance, max timeout is used. | No      | As [configured](#configuration-options) |
+| `pending` | Flag    | If present, the consumed message is not automatically deleted and must be [acknowledged](#3-acknowledge-a-message) manually. | No      | N/A            |
 
-Both url parameters can be used together: `GET /t/<tunnel-id>/poll?timeout=10&pending`.
+*Both `timeout` and `pending` can be used together: `GET /t/<tunnel-id>/poll?timeout=10&pending`*
 
-__Success responses:__
+#### Response Headers
 
-- 204 with empty body if no new messages were found or timeout reached.
-- 200 with body containing the new message. Content type can be obtained from `Content-Type` header in the response. Message id can be obtained from `X-Message-Id` header in the response.
+(Same as non-blocking consume: `Content-Type`, `X-Message-Id`)
 
-__Error responses:__
+#### Responses
 
-- 500 with text body containing error description, if internal error has occured (see OpenResty log for more details).
+**Success:**
 
-### Acknowledge a message
+| Status Code      | Description                                                                                                   |
+| :--------------- | :------------------------------------------------------------------------------------------------------------ |
+| `200 OK`         | New message found. The response body contains the message. `Content-Type` and `X-Message-Id` are present.       |
+| `204 No Content` | No new messages were found within the timeout period. Empty body.                                               |
+
+#### Example
+
+**Request:**
+
+```bash
+curl -v "https://relay.tunnelhead.dev/t/demo/poll?timeout=10"
+```
+
+**Response (if message arrives within 10s):**
+
+```http
+HTTP/1.1 200 OK
+X-Message-Id: 1746450313373-1
+Content-Type: application/json
+Content-Length: 25
+
+{"text": "Another message"}
+```
+
+**Response (if timeout occurs):**
+
+```http
+HTTP/1.1 204 No Content
+```
+
+---
+
+### 3. Acknowledge a Message
 
 `DELETE /t/<tunnel-id>/<message-id>`
 
-This endpoint is used for consumers in pending mode to acknowledge message delivery and delete it from the tunnel.
+This endpoint is used by consumers in `pending` mode to acknowledge message delivery and delete it from the tunnel.
 
-__Success responses:__
+#### Responses
 
-- 204 with empty body
+**Success:**
 
-__Error responses:__
+| Status Code      | Description              |
+| :--------------- | :----------------------- |
+| `204 No Content` | Message acknowledged and deleted. Empty body. |
 
-- 500 with text body containing error description, if internal error has occured (see OpenResty log for more details).
+#### Example
 
-__Example request:__
+**Request:**
 
-```
+```bash
 curl -X DELETE https://relay.tunnelhead.dev/t/demo/1746483376267-0
 ```
 
-__Example response:__
+**Response:**
 
-```
-204 No Content
+```http
+HTTP/1.1 204 No Content
 ```
 
-### Get queue size (length)
+---
+
+### 4. Acknowledge with Reply
+
+`POST /t/<tunnel-id>/<message-id>/reply`
+
+This endpoint acknowledges a message and stores the reply for the producer to [read](#5-read-message-reply).
+
+The `Content-Type` header of the request is stored with the reply and sent back to the producer.
+
+#### Request Headers
+
+| Header         | Description                     | Example            | Required | Default |
+| :------------- | :------------------------------ | :----------------- | :------- | :------ |
+| `Content-Type` | The format of the message body. | `application/json` | No       | As [configured](#configuration-options) |
+
+#### Responses
+
+**Success:**
+
+| Status Code   | Description                           |
+| :------------ | :------------------------------------ |
+| `201 Created` | Reply successfully saved. Empty body. |
+
+**Errors:**
+
+| Status Code                | Description |
+| :------------------------- | :------------------------- |
+| `204 No Content`           | Message to reply to is not found or not in pending state. |
+
+#### Example
+
+**Request:**
+
+```bash
+curl -d '{"text": "Hello, World!"}' \
+     -H "Content-Type: application/json" \
+     -X POST https://relay.tunnelhead.dev/t/demo/1746483376267-0/reply
+```
+
+**Response:**
+
+```http
+HTTP/1.1 201 Created
+```
+
+---
+
+### 5. Read Message Reply
+
+#### Read Reply (Non-blocking)
+
+`GET /t/<tunnel-id>/<message-id>/reply`
+
+This endpoint allows producer to read a reply to a message, if a consumer has sent one during [acknowledgement](#acknowledgement) in pending mode.
+
+#### Response Headers
+
+| Header         | Description                        | Example            |
+| :------------- | :--------------------------------- | :----------------- |
+| `Content-Type` | The format of the message body.    | `application/json` |
+
+#### Responses
+
+**Success:**
+
+| Status Code      | Description |
+| :--------------- | :---------- |
+| `200 OK`         | Reply found. The response body contains the message. `Content-Type` is present. |
+| `204 No Content` | No reply was found. Empty body. |
+
+#### Example
+
+**Request:**
+
+```bash
+curl -v https://relay.tunnelhead.dev/t/demo/1746483376267-0/reply
+```
+
+**Response (if reply exists):**
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 25
+
+{"text": "Hello, World!"}
+```
+
+**Response (if no reply):**
+
+```http
+HTTP/1.1 204 No Content
+```
+
+---
+
+#### Read Reply (Long Polling)
+
+`GET /t/<tunnel-id>/<message-id>/reply/poll`
+
+This endpoint allows producer to wait for a reply to a message (in a blocking manner).
+
+#### URL Parameters
+
+| Parameter | Type    | Description  | Required | Default        |
+| :-------- | :------ | :----------- | :------- | :------------- |
+| `timeout` | Integer | Timeout in seconds. If larger than the max timeout configured for the relay instance, max timeout is used. | No      | As [configured](#configuration-options) |
+
+#### Response Headers
+
+| Header         | Description                        | Example            |
+| :------------- | :--------------------------------- | :----------------- |
+| `Content-Type` | The format of the message body.    | `application/json` |
+
+#### Responses
+
+**Success:**
+
+| Status Code      | Description        |
+| :--------------- | :----------------- |
+| `200 OK`         | Reply found. The response body contains the message. `Content-Type` is present. |
+| `204 No Content` | No reply was found within the timeout period. Empty body. |
+
+#### Example
+
+**Request:**
+
+```bash
+curl -v "https://relay.tunnelhead.dev/t/demo/1746483376267-0/reply?timeout=10"
+```
+
+**Response (if reply arrives within 10s):**
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 25
+
+{"text": "Another message"}
+```
+
+**Response (if timeout occurs):**
+
+```http
+HTTP/1.1 204 No Content
+```
+
+---
+
+### 6. Get Message Status
+
+`GET /t/<tunnel-id>/<message-id>`
+
+Retrieves the status of a message in a tunnel.
+
+#### Responses
+
+**Success:**
+
+| Status Code      | Description                                                            |
+| :--------------- | :--------------------------------------------------------------------- |
+| `201 Created`    | Message was created by producer, but not seen by consumer yet          |
+| `202 Accepted`   | Message was seen by consumer, but not acknowledged yet (pending mode)  |
+| `204 No Content` | Message never existed or was already consumed and acknowledged         |
+
+#### Example
+
+**Request:**
+
+```bash
+curl -v https://relay.tunnelhead.dev/t/demo/1746483376267-0
+```
+
+**Response:**
+
+```http
+HTTP/1.1 202 Accepted
+```
+
+---
+
+### 7. Get Queue Size
 
 `GET /t/<tunnel-id>/len`
 
-When backpressure is enabled, queue size can be checked using this endpoint.
+Retrieves the current size of the message queue for a tunnel. This is particularly useful when backpressure is enabled. The queue size includes both seen (pending) and unseen messages.
 
-Queue size includes both seen (pending) and unseen by the consumer messages.
+#### Response Headers
 
-__Success responses:__
+| Header         | Description           | Example |
+| :------------- | :-------------------- | :------ |
+| `X-Queue-Size` | Current queue size.   | `3`     |
 
-- 204 with empty body. Current queue size can be obtained from `X-Queue-Size` header in the response.
+#### Responses
 
-__Error responses:__
+**Success:**
 
-- 500 with text body containing error description, if internal error has occured (see OpenResty log for more details).
+| Status Code      | Description                                                              |
+| :--------------- | :----------------------------------------------------------------------- |
+| `204 No Content` | Success. Current queue size is in the `X-Queue-Size` header. Empty body. |
 
-__Example request:__
+#### Example
 
-```
+**Request:**
+
+```bash
 curl -v https://relay.tunnelhead.dev/t/demo/len
 ```
 
-__Example response:__
+**Response:**
 
-```
-204 No Content
+```http
+HTTP/1.1 204 No Content
 X-Queue-Size: 3
 ```
 
-### Clean the queue (delete tunnel)
+---
+
+### 8. Clear Tunnel (Delete All Messages)
 
 `DELETE /t/<tunnel-id>/all`
 
-Clean all messages from the tunnel, including pending and not yet seen.
+Clears all messages from the specified tunnel, including pending and not-yet-seen messages. This effectively deletes the tunnel and its contents.
 
-This effectively deletes the tunnel.
+#### Response Headers
 
-__Success responses:__
+| Header         | Description                                  | Example |
+| :------------- | :------------------------------------------- | :------ |
+| `X-Queue-Size` | Current queue size (will always be `0`).     | `0`     |
 
-- 204 with empty body. Current queue size (always 0 for this request) can be obtained from `X-Queue-Size` header in the response.
+#### Responses
 
-__Error responses:__
+**Success:**
 
-- 500 with text body containing error description, if internal error has occured (see OpenResty log for more details).
+| Status Code      | Description                                                                |
+| :--------------- | :------------------------------------------------------------------------- |
+| `204 No Content` | Tunnel cleared. `X-Queue-Size` header indicates `0`. Empty body.           |
 
-__Example request:__
+#### Example
 
-```
+**Request:**
+
+```bash
 curl -X DELETE https://relay.tunnelhead.dev/t/demo/all
 ```
 
-__Example response:__
+**Response:**
 
-```
-204 No Content
+```http
+HTTP/1.1 204 No Content
 X-Queue-Size: 0
 ```
 
-### Health check
+---
+
+### 9. Health Check
 
 `GET /health`
 
-This endpoint ensures that OpenResty is up and running. It must always return http code 200 and text "OK".
+This endpoint can be used to verify that the OpenResty service is up and running.
 
-__Example request:__
+#### Responses
 
-```
+**Success:**
+
+| Status Code | Description                                      |
+| :---------- | :----------------------------------------------- |
+| `200 OK`    | Service is healthy. Body contains "OK".          |
+
+#### Example
+
+**Request:**
+
+```bash
 curl https://relay.tunnelhead.dev/health
 ```
 
-__Example response:__
+**Response:**
 
-```
-200 OK
+```http
+HTTP/1.1 200 OK
 Content-Type: text/plain
+Content-Length: 2
+
 OK
 ```
 

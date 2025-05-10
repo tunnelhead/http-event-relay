@@ -44,4 +44,42 @@ function _M.release_connection(red)
     end
 end
 
+function _M.multi_exec(red, commands)
+    local ok, err = red:multi()
+    if not ok then
+        ngx.log(ngx.ERR, "Failed to run multi: ", err)
+        return nil, err
+    end
+
+    for i, args in pairs(commands) do
+        local cmd = table.remove(args, 1)
+        local status_queue, err_queue = red[cmd](red, unpack(args))
+        if not status_queue or status_queue ~= "QUEUED" then
+            local err = "Failed to queue command " .. cmd .. ": " .. (err_queue or ("status was " .. tostring(status_queue)))
+            ngx.log(ngx.ERR, err)
+
+            -- If a command fails to queue, discard the transaction
+            local ok_discard, err_discard = red:discard()
+            if not ok_discard then
+                ngx.log(ngx.ERR, "Failed to discard transaction after queue error: ", err_discard)
+                -- Try to close the connection, as we can't use it with something still queued
+                local ok_close, err_close = red:close()
+                if not ok_close then
+                    ngx.log(ngx.ERR, "Failed to close redis connection: ", err_close)
+                end
+                return nil, err, true
+            end
+
+            return nil, err
+        end
+    end
+
+    local res, err = red:exec()
+    if err then
+        ngx.log(ngx.ERR, "Failed to run exec: ", err)
+        return nil, err
+    end
+    return res
+end
+
 return _M
