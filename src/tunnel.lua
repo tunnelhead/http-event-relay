@@ -1,21 +1,6 @@
+local utils = require "utils"
 local redis_conn = require "redis_conn"
-
-local function get_request_body()
-    ngx.req.read_body()
-    local body = ngx.req.get_body_data()
-    if not body then
-        local body_file = ngx.req.get_body_file()
-        if body_file then
-            local f = io.open(body_file, "rb")
-            if f then
-                body = f:read("*all")
-                f:close()
-            end
-        end
-    end
-
-    return body or ""
-end
+local access_control = require "access_control"
 
 -- Helper functions to generate Redis keys
 
@@ -39,31 +24,18 @@ local function get_reply_type_key(tunnel_id, msg_id)
     return "t:" .. tunnel_id .. ":rt-" .. msg_id
 end
 
----
+-- Tunnel helpers
 
 local function is_demo_tunnel(tunnel_id)
     return tunnel_config.demo_tunnel_id and tunnel_id == tunnel_config.demo_tunnel_id
 end
 
-local function check_access_token(tunnel_id)
-    if not tunnel_config.token then
-        return nil
-    end
-
+local function check_access(tunnel_id)
     if is_demo_tunnel(tunnel_id) then
-        return nil
+        return
     end
 
-    local auth_header = ngx.var.http_Authorization
-    if auth_header then
-        _, _, token = string.find(auth_header, "Bearer%s+(.+)")
-    end
-
-    if not token or token ~= tunnel_config.token then
-        ngx.status = 403
-        ngx.print("Access denied")
-        return ngx.exit(403)
-    end
+    access_control.ensure_access()
 end
 
 local function get_validated_tunnel_id()
@@ -74,7 +46,7 @@ local function get_validated_tunnel_id()
         return ngx.exit(400)
     end
 
-    check_access_token(tunnel_id)
+    check_access(tunnel_id)
 
     return tunnel_id
 end
@@ -109,6 +81,7 @@ local function release_and_exit(red, status_code, message)
     return ngx.exit(status_code)
 end
 
+-- Module
 
 local _M = {}
 
@@ -125,7 +98,7 @@ function _M.post_message()
         return release_and_exit(nil, 400, "Limit must be less than the tunnel max length")
     end
 
-    local body = get_request_body()
+    local body = utils.get_request_body()
     local content_type = ngx.req.get_headers()["Content-Type"]
 
     local stream_key = get_stream_key(tunnel_id)
@@ -341,7 +314,7 @@ function _M.post_reply()
         return release_and_exit(red, 204, nil) -- No Content
     end
 
-    local body = get_request_body()
+    local body = utils.get_request_body()
     local content_type = ngx.req.get_headers()["Content-Type"]
 
     local commands = {
@@ -449,6 +422,7 @@ function _M.poll_reply()
     return ngx.exit(200)
 end
 
+-- GET message status
 function _M.get_msg_status()
     local tunnel_id = get_validated_tunnel_id()
     local msg_id = get_validated_message_id()

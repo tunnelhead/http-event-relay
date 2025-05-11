@@ -1,5 +1,8 @@
 FROM openresty/openresty:alpine
 
+# Install packages
+RUN apk add perl curl && opm get jkeys089/lua-resty-hmac
+
 # Create directories
 RUN mkdir -p /usr/local/openresty/lua && mkdir -p /var/www/demo
 

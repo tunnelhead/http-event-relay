@@ -6,9 +6,10 @@ Built on top of OpenResty and KeyDB, inheriting their scalability and performanc
 
 [Fancy Live Demo!](https://relay.tunnelhead.dev/demo/)
 
-## Original purpose
+## Potential uses
 
-Easy communication between two parties behind NAT.
+* Communication between two parties behind NAT
+* Converting webhook updates into long polling endpoint
 
 ## Concepts
 
@@ -98,6 +99,7 @@ Event relay can be configured using the following environmental variables:
 | REDIS_POOL_SIZE             | How much connections to keep alive after use           | 100        |
 | REDIS_POOL_KEEPALIVE        | How long to keep connections alive after use (seconds) | 10         |
 | TUNNEL_ACCESS_TOKEN         | Access token to authenticate requests to the relay     |            |
+| TUNNEL_SIGNATURE_SECRET     | Secret for validating request data signature           |            |
 | TUNNEL_MAXLEN               | Maximum queue size for a single tunnel                 | 1000       |
 | TUNNEL_BACKPRESSURE         | If backpressure should be enabled by default (1 or 0)  | 1          |
 | TUNNEL_MAX_POLL_TIMEOUT     | Maximum wait time for long polling (seconds)           | 60         |
@@ -114,12 +116,26 @@ Max message size is set to 128kb by default using `client_max_body_size` option 
 ### Authorization
 
 By default relay server is not protected and accepts any requests.
+But one or more options can be configured to protect it.
+
+#### Access Token
 
 If access token is provided in `TUNNEL_ACCESS_TOKEN` configuration option,
 requests to tunnel endpoints (`/t/...`) will require authorization header:
 
 ```
 Authorization: Bearer <access-token>
+```
+
+#### Signature Validation
+
+Producers can be protected via payload signature validation instead of the access token.
+
+HMAC secret must be provided in `TUNNEL_SIGNATURE_SECRET` configuration option,
+requests to producer endpoints will require valid signature in the header (e.g. for GitHub Webhooks):
+
+```
+X-Hub-Signature-256: sha256=<signature>
 ```
 
 ### Tunnel IDs

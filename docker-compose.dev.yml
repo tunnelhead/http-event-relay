@@ -16,6 +16,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - TUNNEL_ACCESS_TOKEN=thisisasecret
+      - TUNNEL_SIGNATURE_SECRET=octopusatecat
       - TUNNEL_DEMO_ID=demo
     depends_on:
       - redis

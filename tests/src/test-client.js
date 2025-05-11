@@ -3,6 +3,7 @@ const axios = require("axios");
 // --- Configuration ---
 const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
 const ACCESS_TOKEN = process.env.TUNNEL_ACCESS_TOKEN || "thisisasecret";
+const SIGNATURE_SECRET = process.env.TUNNEL_SIGNATURE_SECRET || "octopusatecat";
 const DEMO_TUNNEL_ID = process.env.TUNNEL_DEMO_ID || "demo";
 
 // --- API Client Setup ---
@@ -21,6 +22,7 @@ function getAuthHeaders(customHeaders = {}) {
 
 module.exports = {
     DEMO_TUNNEL_ID,
+    SIGNATURE_SECRET,
     getApiClient: () => apiClient,
     produceMessage: async function (
         tunnelId,
