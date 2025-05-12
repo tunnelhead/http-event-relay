@@ -26,7 +26,7 @@ services:
       - TUNNEL_MAX_POLL_TIMEOUT
       - TUNNEL_DEFAULT_POLL_TIMEOUT
       - TUNNEL_DEFAULT_CONTENT_TYPE
-      - TUNNEL_DEMO_ID
+      - TUNNEL_PUBLIC_IDS
     depends_on:
       - redis
 

@@ -48,10 +48,12 @@ describe("Authorization Tests", () => {
             expect(res.status).toBe(201);
         });
 
-        it("should SUCCEED to consume message in DEMO tunnel if token is NOT provided", async () => {
-            const res = await apiClient.get(`/t/${client.DEMO_TUNNEL_ID}`, { headers: {} });
-            expect([200, 204]).toContain(res.status);
-        });
+        for (const publicId of client.PUBLIC_TUNNEL_IDS) {
+            it(`should SUCCEED to consume message in PUBLIC tunnel '${publicId}' without token`, async () => {
+                const res = await apiClient.get(`/t/${publicId}`, { headers: {} });
+                expect([200, 204]).toContain(res.status);
+            });
+        }
 
         it("should FAIL to consume message if token is NOT provided", async () => {
             const res = await apiClient.get(`/t/${testTunnelId}`, { headers: {} });

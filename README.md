@@ -100,6 +100,7 @@ Event relay can be configured using the following environmental variables:
 | REDIS_POOL_KEEPALIVE        | How long to keep connections alive after use (seconds) | 10         |
 | TUNNEL_ACCESS_TOKEN         | Access token to authenticate requests to the relay     |            |
 | TUNNEL_SIGNATURE_SECRET     | Secret for validating request data signature           |            |
+| TUNNEL_PUBLIC_IDS           | Only allow these tunnels without auth, comma-separated |            |
 | TUNNEL_MAXLEN               | Maximum queue size for a single tunnel                 | 1000       |
 | TUNNEL_BACKPRESSURE         | If backpressure should be enabled by default (1 or 0)  | 1          |
 | TUNNEL_MAX_POLL_TIMEOUT     | Maximum wait time for long polling (seconds)           | 60         |
@@ -116,7 +117,7 @@ Max message size is set to 128kb by default using `client_max_body_size` option 
 ### Authorization
 
 By default relay server is not protected and accepts any requests.
-But one or more options can be configured to protect it.
+One or more options can be configured to protect it.
 
 #### Access Token
 
@@ -138,6 +139,26 @@ requests to producer endpoints will require valid signature in the header (e.g. 
 X-Hub-Signature-256: sha256=<signature>
 ```
 
+#### Public Tunnels
+
+Multiple predefined tunnel IDs can be provided in the `TUNNEL_PUBLIC_IDS` configuration option (comma-separated).
+
+If this option is used, provided tunnels will be available without authorization regardless of other auth options.
+Additionally, any other tunnels become unavailable, unless another auth option is configured to access them.
+
+This can be used to protect access to the relay if producer (e.g. webhook source) doesn't support any auth methods.
+In this case, long unique tunnel id can be configured as public.
+
+Example:
+
+```
+TUNNEL_PUBLIC_IDS="6962add5-bdf9-4e6d-b2fc-53efa1c4897d,58e1a750-8bfa-40e6-8faa-eeec58e7b8f2"
+
+GET /t/6962add5-bdf9-4e6d-b2fc-53efa1c4897d - allowed
+GET /t/58e1a750-8bfa-40e6-8faa-eeec58e7b8f2 - allowed
+GET /t/something-else - forbidden without access token
+```
+
 ### Tunnel IDs
 
 Protocol description mentions `<tunnel-id>` in urls, which must be replaced with user-selected identifier.
@@ -153,6 +174,8 @@ Acceptable characters in the identifier:
 - Characters '-' and '_'
 
 Tunnel IDs can be up to 1024 characters long.
+
+Tunnel IDs are case-sensitive, "test" and "Test" are two different tunnels.
 
 ### Two-Way Communication
 

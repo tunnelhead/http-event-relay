@@ -105,8 +105,12 @@ end
 
 local _M = {}
 
+function _M.is_public_tunnel(tunnel_id)
+    return tunnel_config.public_ids and tunnel_config.public_ids[tunnel_id]
+end
+
 function _M.ensure_access()
-    if not tunnel_config.token and not tunnel_config.sig_secret then
+    if not tunnel_config.token and not tunnel_config.sig_secret and not tunnel_config.public_ids then
         -- No auth methods configured, run unprotected
         return
     end

@@ -26,12 +26,8 @@ end
 
 -- Tunnel helpers
 
-local function is_demo_tunnel(tunnel_id)
-    return tunnel_config.demo_tunnel_id and tunnel_id == tunnel_config.demo_tunnel_id
-end
-
 local function check_access(tunnel_id)
-    if is_demo_tunnel(tunnel_id) then
+    if access_control.is_public_tunnel(tunnel_id) then
         return
     end
 

@@ -17,7 +17,7 @@ services:
       - REDIS_PORT=6379
       - TUNNEL_ACCESS_TOKEN=thisisasecret
       - TUNNEL_SIGNATURE_SECRET=octopusatecat
-      - TUNNEL_DEMO_ID=demo
+      - TUNNEL_PUBLIC_IDS=demo,something-else
     depends_on:
       - redis
     # mount lua dir and disable cache for faster development

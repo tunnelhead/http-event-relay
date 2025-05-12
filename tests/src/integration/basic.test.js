@@ -62,6 +62,18 @@ describe("Basic Integration Tests", () => {
             expect(consumeRes.data).toBe("");
         });
 
+        it("should have case-sensitive tunnel ids", async () => {
+            const message = "HELLO, WORLD!";
+            const produceRes = await client.produceMessage(testTunnelId, message, false);
+            expect(produceRes.status).toBe(201);
+
+            const upperConsumeRes = await client.consumeMessage(testTunnelId.toUpperCase());
+            expect(upperConsumeRes.status).toBe(204);
+
+            const consumeRes = await client.consumeMessage(testTunnelId);
+            expect(consumeRes.status).toBe(200);
+        });
+
         it("should report message status", async () => {
             // Tunnel not created yet
             let statusRes = await client.getMessageStatus(testTunnelId, '0-0');
